@@ -54,6 +54,11 @@ on:
         required: false
         type: boolean
         default: true
+      coverage:
+        description: 'Mede a cobertura de testes com pcov e publica o número no resumo do job. Sem gate — o objetivo é ter o número.'
+        required: false
+        type: boolean
+        default: false
       baseline-gate:
         description: 'Falha o PR se o phpstan-baseline.neon crescer em relação à branch alvo.'
         required: false
@@ -176,7 +181,10 @@ jobs:
           php-version: ${{ inputs.php-version }}
           extensions: ${{ inputs.php-extensions }}
           tools: composer:v2
-          coverage: none
+          # pcov quando há cobertura a medir: é ordens de grandeza mais barato
+          # que o xdebug, que fica proibido justamente por ser caro e por
+          # mascarar recursão real.
+          coverage: ${{ inputs.coverage && 'pcov' || 'none' }}
       - uses: actions/setup-node@v4
         if: ${{ inputs.frontend }}
         with:
@@ -206,7 +214,16 @@ jobs:
           npm ci
           npm run build
       - name: Pest
+        if: ${{ ! inputs.coverage }}
         run: php artisan test
+      - name: Pest com cobertura
+        if: ${{ inputs.coverage }}
+        run: |
+          set -o pipefail
+          php artisan test --coverage 2>&1 | tee /tmp/cobertura.txt
+          pct=$(grep -oE 'Total: *[0-9.]+ *%' /tmp/cobertura.txt | tail -1 | grep -oE '[0-9.]+' | head -1)
+          echo "### Cobertura de testes: ${pct:-n/d}%" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Cobertura de testes: ${pct:-n/d}%"
 
   testes-mysql:
     name: Testes
@@ -236,7 +253,10 @@ jobs:
           php-version: ${{ inputs.php-version }}
           extensions: ${{ inputs.php-extensions }}
           tools: composer:v2
-          coverage: none
+          # pcov quando há cobertura a medir: é ordens de grandeza mais barato
+          # que o xdebug, que fica proibido justamente por ser caro e por
+          # mascarar recursão real.
+          coverage: ${{ inputs.coverage && 'pcov' || 'none' }}
       - uses: actions/setup-node@v4
         if: ${{ inputs.frontend }}
         with:
@@ -269,4 +289,13 @@ jobs:
           npm ci
           npm run build
       - name: Pest
+        if: ${{ ! inputs.coverage }}
         run: php artisan test
+      - name: Pest com cobertura
+        if: ${{ inputs.coverage }}
+        run: |
+          set -o pipefail
+          php artisan test --coverage 2>&1 | tee /tmp/cobertura.txt
+          pct=$(grep -oE 'Total: *[0-9.]+ *%' /tmp/cobertura.txt | tail -1 | grep -oE '[0-9.]+' | head -1)
+          echo "### Cobertura de testes: ${pct:-n/d}%" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Cobertura de testes: ${pct:-n/d}%"
