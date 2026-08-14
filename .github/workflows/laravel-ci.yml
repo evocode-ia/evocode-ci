@@ -49,6 +49,11 @@ on:
         required: false
         type: boolean
         default: false
+      frontend-types:
+        description: 'Roda npm run types (checagem de tipo do frontend) no job de qualidade. Precisa do script `types` no package.json.'
+        required: false
+        type: boolean
+        default: false
       composer-audit:
         description: 'Roda composer audit no job de qualidade.'
         required: false
@@ -154,16 +159,21 @@ jobs:
             echo "::notice::Baseline encolheu $((base - atual)) erros. 👏"
           fi
       - uses: actions/setup-node@v4
-        if: ${{ inputs.frontend-lint }}
+        if: ${{ inputs.frontend-lint || inputs.frontend-types }}
         with:
           node-version: ${{ inputs.node-version }}
           cache: npm
           cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+      # `npm ci` uma vez só: os dois passos abaixo compartilham node_modules.
+      - name: Dependências do frontend
+        if: ${{ inputs.frontend-lint || inputs.frontend-types }}
+        run: npm ci
       - name: Lint do frontend
         if: ${{ inputs.frontend-lint }}
-        run: |
-          npm ci
-          npm run lint
+        run: npm run lint
+      - name: Checagem de tipo do frontend
+        if: ${{ inputs.frontend-types }}
+        run: npm run types
       - name: Auditoria de dependências
         if: ${{ inputs.composer-audit }}
         run: composer audit
