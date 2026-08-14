@@ -54,6 +54,11 @@ on:
         required: false
         type: boolean
         default: true
+      baseline-gate:
+        description: 'Falha o PR se o phpstan-baseline.neon crescer em relação à branch alvo.'
+        required: false
+        type: boolean
+        default: true
       sqlite-file:
         description: 'Cria database/database.sqlite antes dos testes.'
         required: false
@@ -93,6 +98,9 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # O gate de baseline compara com o alvo do PR; precisa do histórico.
+          fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
@@ -107,6 +115,34 @@ jobs:
       - name: PHPStan
         if: ${{ inputs.phpstan }}
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+      # "O baseline só encolhe" só é regra se alguém verificar. Sem isto, basta
+      # regenerar o arquivo para esconder erro novo — e ninguém percebe.
+      - name: Baseline não pode crescer
+        if: ${{ inputs.phpstan && inputs.baseline-gate && github.event_name == 'pull_request' }}
+        run: |
+          arquivo="phpstan-baseline.neon"
+          if [ ! -f "$arquivo" ]; then
+            echo "Sem baseline neste projeto — nada a comparar."
+            exit 0
+          fi
+          soma() { awk '/count:/{s+=$2} END{print s+0}'; }
+          atual=$(soma < "$arquivo")
+          caminho="${{ inputs.working-directory }}"
+          [ "$caminho" = "." ] && alvo="$arquivo" || alvo="$caminho/$arquivo"
+          if ! git cat-file -e "origin/${{ github.base_ref }}:$alvo" 2>/dev/null; then
+            echo "A branch alvo ainda não tem baseline — este PR está adotando um. Liberado."
+            exit 0
+          fi
+          base=$(git show "origin/${{ github.base_ref }}:$alvo" | soma)
+          echo "baseline na ${{ github.base_ref }}: $base"
+          echo "baseline neste PR:      $atual"
+          if [ "$atual" -gt "$base" ]; then
+            echo "::error::O baseline cresceu de $base para $atual. Corrija o erro novo em vez de congelá-lo."
+            exit 1
+          fi
+          if [ "$atual" -lt "$base" ]; then
+            echo "::notice::Baseline encolheu $((base - atual)) erros. 👏"
+          fi
       - uses: actions/setup-node@v4
         if: ${{ inputs.frontend-lint }}
         with:
