@@ -59,6 +59,11 @@ on:
         required: false
         type: boolean
         default: false
+      coverage-min:
+        description: 'Piso de cobertura. O PR falha se a cobertura cair abaixo dele. Sobe por catraca: nunca desce, e cada PR que melhora a cobertura pode subir o piso.'
+        required: false
+        type: number
+        default: 0
       baseline-gate:
         description: 'Falha o PR se o phpstan-baseline.neon crescer em relação à branch alvo.'
         required: false
@@ -220,10 +225,10 @@ jobs:
         if: ${{ inputs.coverage }}
         run: |
           set -o pipefail
-          php artisan test --coverage 2>&1 | tee /tmp/cobertura.txt
+          php artisan test --coverage --min=${{ inputs.coverage-min }} 2>&1 | tee /tmp/cobertura.txt
           pct=$(grep -oE 'Total: *[0-9.]+ *%' /tmp/cobertura.txt | tail -1 | grep -oE '[0-9.]+' | head -1)
-          echo "### Cobertura de testes: ${pct:-n/d}%" >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice::Cobertura de testes: ${pct:-n/d}%"
+          echo "### Cobertura de testes: ${pct:-n/d}% (piso: ${{ inputs.coverage-min }}%)" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Cobertura de testes: ${pct:-n/d}% — piso ${{ inputs.coverage-min }}%"
 
   testes-mysql:
     name: Testes
@@ -295,7 +300,7 @@ jobs:
         if: ${{ inputs.coverage }}
         run: |
           set -o pipefail
-          php artisan test --coverage 2>&1 | tee /tmp/cobertura.txt
+          php artisan test --coverage --min=${{ inputs.coverage-min }} 2>&1 | tee /tmp/cobertura.txt
           pct=$(grep -oE 'Total: *[0-9.]+ *%' /tmp/cobertura.txt | tail -1 | grep -oE '[0-9.]+' | head -1)
-          echo "### Cobertura de testes: ${pct:-n/d}%" >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice::Cobertura de testes: ${pct:-n/d}%"
+          echo "### Cobertura de testes: ${pct:-n/d}% (piso: ${{ inputs.coverage-min }}%)" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Cobertura de testes: ${pct:-n/d}% — piso ${{ inputs.coverage-min }}%"
