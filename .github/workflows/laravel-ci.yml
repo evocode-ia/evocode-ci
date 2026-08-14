@@ -8,8 +8,8 @@
 #       with:
 #         php-version: "8.4"
 #
-# As decisões embutidas aqui saíram de bugs reais, não de preferência:
-# ver docs/DECISOES.md neste repositório antes de mudar qualquer passo.
+# As decisões embutidas aqui saíram de bugs reais, não de preferência — os
+# porquês estão comentados passo a passo. Leia antes de mudar qualquer um.
 name: Laravel CI
 
 on:
@@ -25,7 +25,7 @@ on:
         type: string
         default: '24'
       working-directory:
-        description: 'Onde vive o Laravel, quando não é a raiz do repo (ex.: "app" no pactua).'
+        description: 'Diretório do Laravel, quando ele não fica na raiz do repositório.'
         required: false
         type: string
         default: '.'
