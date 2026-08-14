@@ -1,0 +1,154 @@
+# CI Laravel da casa — workflow reutilizável.
+#
+# Chamada mínima, no repo consumidor:
+#
+#   jobs:
+#     ci:
+#       uses: evocode-ia/evocode-ci/.github/workflows/laravel-ci.yml@v1
+#       with:
+#         php-version: "8.4"
+#
+# As decisões embutidas aqui saíram de bugs reais, não de preferência:
+# ver docs/DECISOES.md neste repositório antes de mudar qualquer passo.
+name: Laravel CI
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        description: 'Versão do PHP. Tem que ser a que o composer.lock exige, não a declarada no composer.json.'
+        required: true
+        type: string
+      node-version:
+        description: 'Versão do Node.'
+        required: false
+        type: string
+        default: '24'
+      working-directory:
+        description: 'Onde vive o Laravel, quando não é a raiz do repo (ex.: "app" no pactua).'
+        required: false
+        type: string
+        default: '.'
+      php-extensions:
+        description: 'Extensões extras do PHP, separadas por vírgula.'
+        required: false
+        type: string
+        default: ''
+      phpstan:
+        description: 'Roda o PHPStan no job de qualidade.'
+        required: false
+        type: boolean
+        default: true
+      frontend:
+        description: 'Instala e builda o frontend antes dos testes. Suíte que renderiza Inertia precisa do manifest do Vite.'
+        required: false
+        type: boolean
+        default: true
+      frontend-lint:
+        description: 'Roda npm run lint no job de qualidade.'
+        required: false
+        type: boolean
+        default: false
+      composer-audit:
+        description: 'Roda composer audit no job de qualidade.'
+        required: false
+        type: boolean
+        default: true
+      sqlite-file:
+        description: 'Cria database/database.sqlite antes dos testes.'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  COMPOSER_NO_INTERACTION: 1
+  COMPOSER_NO_AUDIT: 1
+  COMPOSER_PROCESS_TIMEOUT: 0
+
+jobs:
+  qualidade:
+    name: Qualidade
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: ${{ inputs.php-extensions }}
+          tools: composer:v2
+          # Nunca xdebug sem alguém consumindo cobertura: além de multiplicar o
+          # tempo, o overhead de memória derruba suítes grandes.
+          coverage: none
+      - run: composer install --prefer-dist --no-progress
+      - name: Pint
+        run: vendor/bin/pint --test
+      - name: PHPStan
+        if: ${{ inputs.phpstan }}
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+      - uses: actions/setup-node@v4
+        if: ${{ inputs.frontend-lint }}
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+      - name: Lint do frontend
+        if: ${{ inputs.frontend-lint }}
+        run: |
+          npm ci
+          npm run lint
+      - name: Auditoria de dependências
+        if: ${{ inputs.composer-audit }}
+        run: composer audit
+
+  testes:
+    name: Testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: ${{ inputs.php-extensions }}
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-node@v4
+        if: ${{ inputs.frontend }}
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+      - run: composer install --prefer-dist --no-progress
+      # A ordem abaixo não é decorativa. O .env tem que existir antes do
+      # artisan; o ziggy é gerado pelo artisan e não é versionado; e o build
+      # do frontend depende dele.
+      - name: Preparar ambiente
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Banco sqlite
+        if: ${{ inputs.sqlite-file }}
+        run: touch database/database.sqlite
+      - name: Gerar rotas do Ziggy
+        if: ${{ inputs.frontend }}
+        run: |
+          if composer show tightenco/ziggy >/dev/null 2>&1; then
+            php artisan ziggy:generate
+          fi
+      - name: Build do frontend
+        if: ${{ inputs.frontend }}
+        run: |
+          npm ci
+          npm run build
+      - name: Pest
+        run: php artisan test
