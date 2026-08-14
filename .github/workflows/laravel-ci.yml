@@ -59,6 +59,21 @@ on:
         required: false
         type: boolean
         default: true
+      mysql:
+        description: 'Sobe um MySQL de serviço para a suíte, em vez de sqlite. Use quando o phpunit.xml aponta para MySQL.'
+        required: false
+        type: boolean
+        default: false
+      mysql-version:
+        description: 'Tag da imagem do MySQL de serviço.'
+        required: false
+        type: string
+        default: '8.4'
+      mysql-database:
+        description: 'Nome do banco criado no serviço. Tem que bater com o DB_DATABASE do phpunit.xml.'
+        required: false
+        type: string
+        default: 'testing'
 
 permissions:
   contents: read
@@ -107,8 +122,12 @@ jobs:
         if: ${{ inputs.composer-audit }}
         run: composer audit
 
+  # Há dois jobs de teste porque o GitHub não aceita `if:` em `services:` —
+  # só um deles roda, escolhido pela entrada `mysql`. A duplicação fica aqui,
+  # num lugar só, em vez de espalhada pelos repositórios.
   testes:
     name: Testes
+    if: ${{ ! inputs.mysql }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -139,6 +158,69 @@ jobs:
       - name: Banco sqlite
         if: ${{ inputs.sqlite-file }}
         run: touch database/database.sqlite
+      - name: Gerar rotas do Ziggy
+        if: ${{ inputs.frontend }}
+        run: |
+          if composer show tightenco/ziggy >/dev/null 2>&1; then
+            php artisan ziggy:generate
+          fi
+      - name: Build do frontend
+        if: ${{ inputs.frontend }}
+        run: |
+          npm ci
+          npm run build
+      - name: Pest
+        run: php artisan test
+
+  testes-mysql:
+    name: Testes
+    if: ${{ inputs.mysql }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    services:
+      mysql:
+        image: mysql:${{ inputs.mysql-version }}
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: ${{ inputs.mysql-database }}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: ${{ inputs.php-extensions }}
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-node@v4
+        if: ${{ inputs.frontend }}
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+      - run: composer install --prefer-dist --no-progress
+      - name: Preparar ambiente
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      # O .env.example aponta para o host do compose local (mysql). No runner o
+      # serviço responde em 127.0.0.1, então as credenciais são reescritas.
+      - name: Apontar o banco para o serviço
+        run: |
+          sed -i -E "s/^DB_HOST=.*/DB_HOST=127.0.0.1/" .env
+          sed -i -E "s/^DB_PORT=.*/DB_PORT=3306/" .env
+          sed -i -E "s/^DB_DATABASE=.*/DB_DATABASE=${{ inputs.mysql-database }}/" .env
+          sed -i -E "s/^DB_USERNAME=.*/DB_USERNAME=root/" .env
+          sed -i -E "s/^DB_PASSWORD=.*/DB_PASSWORD=password/" .env
       - name: Gerar rotas do Ziggy
         if: ${{ inputs.frontend }}
         run: |
