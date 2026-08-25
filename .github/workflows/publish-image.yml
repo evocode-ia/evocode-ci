@@ -63,6 +63,33 @@ on:
         required: false
         type: string
         default: linux/amd64
+      labels:
+        description: Labels OCI, no formato que `docker/build-push-action` espera.
+        required: false
+        type: string
+        default: ''
+      target:
+        description: Estágio do Dockerfile a construir, quando multi-stage.
+        required: false
+        type: string
+        default: ''
+      description-repository:
+        description: >-
+          `namespace/repo` cuja descrição no Docker Hub deve ser atualizada a
+          partir do README. Vazio desliga o passo.
+        required: false
+        type: string
+        default: ''
+      short-description:
+        description: Descrição curta do repositório no Docker Hub.
+        required: false
+        type: string
+        default: ''
+      readme-filepath:
+        description: Caminho do README publicado como descrição longa.
+        required: false
+        type: string
+        default: ./README.md
       cache-scope:
         description: >-
           Escopo próprio do cache `type=gha`, não o namespace default
@@ -185,9 +212,24 @@ jobs:
           push: true
           platforms: ${{ inputs.platforms }}
           tags: ${{ inputs.tags }}
+          labels: ${{ inputs.labels }}
+          target: ${{ inputs.target }}
           cache-from: type=gha,scope=${{ inputs.cache-scope }}
           cache-to: type=gha,mode=max,scope=${{ inputs.cache-scope }}
           provenance: false
+
+      # Só quem pede. A descrição no Docker Hub é a primeira coisa que alguém
+      # de fora lê sobre a imagem, e mantê-la junto do push evita que ela
+      # descreva uma versão que já saiu do ar.
+      - name: Atualiza a descrição no Docker Hub
+        if: inputs.description-repository != ''
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ inputs.username }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ inputs.description-repository }}
+          short-description: ${{ inputs.short-description }}
+          readme-filepath: ${{ inputs.readme-filepath }}
 
       - name: Publica as tags no resumo do job
         shell: bash
