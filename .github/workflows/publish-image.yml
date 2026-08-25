@@ -41,8 +41,11 @@ on:
         type: string
       username:
         description: >-
-          Nome de usuário do Docker Hub. Passe `${{ vars.DOCKERHUB_USERNAME }}`
-          — variável do repositório, NÃO secret. Ver o comentário no topo.
+          Nome de usuário do Docker Hub. Passe a variável do repositório
+          `vars.DOCKERHUB_USERNAME` — NÃO um secret. Ver o comentário no topo.
+          (Sem a sintaxe de expressão nesta descrição de propósito: o GitHub a
+          avalia mesmo aqui, e um exemplo escrito por extenso invalida o
+          arquivo inteiro antes de qualquer job começar.)
         required: true
         type: string
       context:
