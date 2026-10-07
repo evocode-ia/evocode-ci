@@ -76,6 +76,17 @@ on:
         required: false
         type: string
         default: ''
+      build-args:
+        description: >-
+          Argumentos de build (`NOME=valor`, um por linha), repassados ao
+          `docker/build-push-action`. Para dado do próprio build que a imagem
+          precisa carregar e o contexto não tem, como o commit e a data (o
+          `.git` costuma ficar fora pelo `.dockerignore`). Nunca segredo:
+          argumento de build fica gravado no histórico da imagem. Vazio não
+          passa nenhum.
+        required: false
+        type: string
+        default: ''
       description-repository:
         description: >-
           `namespace/repo` cuja descrição no Docker Hub deve ser atualizada a
@@ -217,6 +228,7 @@ jobs:
           tags: ${{ inputs.tags }}
           labels: ${{ inputs.labels }}
           target: ${{ inputs.target }}
+          build-args: ${{ inputs.build-args }}
           cache-from: type=gha,scope=${{ inputs.cache-scope }}
           cache-to: type=gha,mode=max,scope=${{ inputs.cache-scope }}
           provenance: false

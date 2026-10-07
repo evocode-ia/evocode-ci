@@ -105,6 +105,7 @@ Entradas principais (todas em [`publish-image.yml`](.github/workflows/publish-im
 | `platforms` | `linux/amd64` | Plataformas do build. Declarado, não herdado do runner. |
 | `labels` | vazio | Labels OCI. |
 | `target` | vazio | Estágio do Dockerfile a construir, em build multi-stage. |
+| `build-args` | vazio | Argumentos de build (`NOME=valor`, um por linha), para dado do próprio build que a imagem carrega e o contexto não tem, como commit e data. Nunca segredo: fica gravado no histórico da imagem. |
 | `description-repository` | vazio | `namespace/repo` cuja descrição no Docker Hub deve ser atualizada a partir do README. Vazio desliga o passo. |
 | `short-description` | vazio | Descrição curta do repositório no Docker Hub. |
 | `readme-filepath` | `./README.md` | Caminho do README publicado como descrição longa. |
