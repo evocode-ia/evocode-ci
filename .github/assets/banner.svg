@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="EvoCODE CI: Workflows reutilizáveis de CI para projetos Laravel">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1F232F"/>
+      <stop offset="1" stop-color="#2A2F3D"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#04B4EF"/>
+      <stop offset="1" stop-color="#A0CC3B"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#04B4EF" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#04B4EF"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity="0.035"/>
+    </pattern>
+    <radialGradient id="glow" cx="0.85" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#04B4EF" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#04B4EF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="320" rx="16" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="16" fill="url(#grid)"/>
+  <rect width="1280" height="320" rx="16" fill="url(#glow)"/>
+  <g>
+    <line x1="825" y1="59" x2="859" y2="35" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="825" y1="59" x2="878" y2="59" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="985" y1="208" x2="917" y2="227" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="985" y1="208" x2="973" y2="278" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="878" y1="59" x2="859" y2="35" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="878" y1="59" x2="908" y2="86" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="917" y1="227" x2="882" y2="223" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="917" y1="227" x2="985" y2="208" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="882" y1="223" x2="917" y2="227" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="882" y1="223" x2="985" y2="208" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1098" y1="66" x2="1045" y2="146" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1098" y1="66" x2="1066" y2="172" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1045" y1="146" x2="1066" y2="172" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1045" y1="146" x2="985" y2="208" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="993" y1="289" x2="973" y2="278" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="993" y1="289" x2="985" y2="208" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="859" y1="35" x2="878" y2="59" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="859" y1="35" x2="825" y2="59" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1215" y1="135" x2="1221" y2="248" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1215" y1="135" x2="1098" y2="66" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="903" y1="116" x2="908" y2="86" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="903" y1="116" x2="878" y2="59" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="973" y1="278" x2="993" y2="289" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="973" y1="278" x2="985" y2="208" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="908" y1="86" x2="903" y2="116" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="908" y1="86" x2="878" y2="59" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1066" y1="172" x2="1045" y2="146" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1066" y1="172" x2="985" y2="208" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1221" y1="248" x2="1215" y2="135" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="1221" y1="248" x2="1066" y2="172" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="969" y1="83" x2="908" y2="86" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="969" y1="83" x2="903" y2="116" stroke="url(#edge)" stroke-width="1.2" opacity="0.55"/>
+    <circle cx="825" cy="59" r="6" fill="#A0CC3B"/>
+    <circle cx="825" cy="59" r="13" fill="none" stroke="#A0CC3B" stroke-opacity="0.35"/>
+    <circle cx="985" cy="208" r="3.5" fill="#04B4EF"/>
+    <circle cx="878" cy="59" r="3.5" fill="#04B4EF"/>
+    <circle cx="917" cy="227" r="3.5" fill="#A0CC3B"/>
+    <circle cx="882" cy="223" r="6" fill="#04B4EF"/>
+    <circle cx="882" cy="223" r="13" fill="none" stroke="#04B4EF" stroke-opacity="0.35"/>
+    <circle cx="1098" cy="66" r="3.5" fill="#04B4EF"/>
+    <circle cx="1045" cy="146" r="3.5" fill="#A0CC3B"/>
+    <circle cx="993" cy="289" r="3.5" fill="#04B4EF"/>
+    <circle cx="859" cy="35" r="6" fill="#04B4EF"/>
+    <circle cx="859" cy="35" r="13" fill="none" stroke="#04B4EF" stroke-opacity="0.35"/>
+    <circle cx="1215" cy="135" r="3.5" fill="#A0CC3B"/>
+    <circle cx="903" cy="116" r="3.5" fill="#04B4EF"/>
+    <circle cx="973" cy="278" r="3.5" fill="#04B4EF"/>
+    <circle cx="908" cy="86" r="6" fill="#A0CC3B"/>
+    <circle cx="908" cy="86" r="13" fill="none" stroke="#A0CC3B" stroke-opacity="0.35"/>
+    <circle cx="1066" cy="172" r="3.5" fill="#04B4EF"/>
+    <circle cx="1221" cy="248" r="3.5" fill="#04B4EF"/>
+    <circle cx="969" cy="83" r="3.5" fill="#A0CC3B"/>
+  </g>
+  <rect x="72" y="82" width="56" height="4" rx="2" fill="url(#accent)"/>
+  <text x="72" y="150" fill="#FFFFFF" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="64" font-weight="700" letter-spacing="-1">EvoCODE CI</text>
+  <text x="72" y="200" fill="#C9D1D9" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="24">Workflows reutilizáveis de CI para projetos Laravel</text>
+  <text x="72" y="256" fill="#04B4EF" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" letter-spacing="3">EVOCODE IA®</text>
+</svg>
