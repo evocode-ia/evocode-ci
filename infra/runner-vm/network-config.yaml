@@ -1,0 +1,15 @@
+version: 2
+ethernets:
+  rede:
+    match:
+      name: "en*"
+    addresses:
+      - @IP@/24
+    routes:
+      - to: default
+        via: @GATEWAY@
+    # DNS público: o resolvedor do host responderia nomes da tailnet.
+    nameservers:
+      addresses:
+        - 1.1.1.1
+        - 9.9.9.9

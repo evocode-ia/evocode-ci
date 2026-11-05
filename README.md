@@ -17,7 +17,7 @@
 ![MySQL](https://img.shields.io/badge/MySQL-8.4_%28padr%C3%A3o%29-4479A1?style=flat-square&logo=mysql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker_Hub-publish-2496ED?style=flat-square&logo=docker&logoColor=white)
 
-[Arquitetura](#arquitetura) · [Começando](#começando) · [Uso](#uso) · [Workflows](.github/workflows)
+[Runners próprios](docs/runners.md) · [Arquitetura](#arquitetura) · [Começando](#começando) · [Uso](#uso) · [Workflows](.github/workflows)
 
 </div>
 
@@ -53,6 +53,9 @@ endereço interno, só passos de build.
 |---|---|
 | [`laravel-ci.yml`](.github/workflows/laravel-ci.yml) | CI para projetos Laravel: Pint, PHPStan (com gate de baseline), `composer audit`, build de frontend (Vite/Ziggy) e testes com Pest, em sqlite ou MySQL de serviço. |
 | [`publish-image.yml`](.github/workflows/publish-image.yml) | Publica imagem no Docker Hub com pré-voo de credenciais (valida formato, não só presença) e, opcionalmente, atualiza a descrição do repositório no Docker Hub a partir do README. |
+
+Os jobs podem rodar em máquinas nossas, sem consumir minutos do GitHub. Como usar, como funciona, devs externos e
+troca de servidor: **[docs/runners.md](docs/runners.md)**.
 
 ## Destaques
 

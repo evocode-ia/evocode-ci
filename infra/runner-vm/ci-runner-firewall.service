@@ -1,0 +1,16 @@
+[Unit]
+Description=Isolamento de rede das VMs dos runners de CI
+# Antes do libvirtd, que faz o autostart das VMs: elas nunca sobem sem isolamento. Parar este serviço para o libvirtd.
+After=network.target docker.service ufw.service
+Wants=network-online.target
+Before=libvirtd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/ci-runner-firewall
+ExecStop=/usr/local/sbin/ci-runner-firewall parar
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=libvirtd.service

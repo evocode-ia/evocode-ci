@@ -99,11 +99,15 @@ vale o que foi medido no projeto; exceção a regra mora em ADR.
 
 Entradas e padrões de cada um: tabelas do `README.md`, seção *Como usar*.
 
+Runners próprios: scripts em `infra/runner-vm/`, documentação em `docs/runners.md`, decisão em
+`docs/adr/0001-runners-proprios.md`.
+
 ## Comandos
 
 Não há suíte própria: o `.yml` é o artefato. Valide pelo consumo real, com um PR num projeto
 consumidor apontando para a branch (`uses: evocode-ia/evocode-ci/.github/workflows/laravel-ci.yml@<branch>`)
-antes de mover a tag `v1` (`README.md`, *Qualidade*).
+antes de mover a tag `v1` (`README.md`, *Qualidade*). Para `infra/runner-vm/`, depois de mudar o firewall, repita
+o teste de isolamento de `docs/runners.md`.
 
 ## Fatos deste projeto
 
@@ -127,4 +131,9 @@ Cada uma veio de pipeline vermelha ou incidente; o porquê passo a passo está n
 - **`publish-image.yml`**: usuário do Docker Hub é `input` (`vars.DOCKERHUB_USERNAME`), não secret;
   só `DOCKERHUB_TOKEN` é segredo. O pré-voo contra `auth.docker.io` dá erro legível antes do login.
   Actions fixadas por SHA de 40 caracteres, nunca por tag de major.
-- **Mudança aqui atinge todo consumidor de `@v1`** ao mover a tag.
+- **Mudança aqui atinge todo consumidor de `@v1`** ao mover a tag. A entrada `runs-on` é JSON e tem que manter
+  `"ubuntu-latest"` como padrão: consumidores de outras organizações não têm os runners.
+- **Um runner por VM.** Na mesma máquina, jobs disputam portas de serviço e o PHP global do `setup-php`. Para ganhar
+  capacidade, crie outra VM.
+- **Runner nunca direto no host:** quem tem escrita em um repositório executa código nele (`docs/runners.md`).
+- **Repositório público:** nome real de máquina, tailnet ou IP público não entra em `infra/` nem em `docs/`.

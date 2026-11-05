@@ -1,0 +1,36 @@
+#cloud-config
+hostname: @NOME@
+manage_etc_hosts: true
+ssh_pwauth: false
+disable_root: true
+users:
+  - name: ci
+    shell: /bin/bash
+    # Administração, a partir do host. A VM é descartável e não guarda nada pessoal: sudo sem senha aqui é aceitável.
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - @CHAVE@
+package_update: true
+package_upgrade: true
+packages:
+  - build-essential
+  - curl
+  - docker-buildx
+  - docker-compose-v2
+  - docker.io
+  - git
+  - jq
+  - libicu74
+  - python3
+  - python3-venv
+  - unzip
+  - zip
+runcmd:
+  - systemctl enable --now docker
+final_message: "ci-runner pronto"
+# Termina o primeiro boot desligando: criar-vm.sh religa a VM com a configuração definitiva.
+power_state:
+  mode: poweroff
+  message: fim do primeiro boot
+  condition: true
