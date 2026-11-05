@@ -133,7 +133,8 @@ Cada uma veio de pipeline vermelha ou incidente; o porquê passo a passo está n
   Actions fixadas por SHA de 40 caracteres, nunca por tag de major.
 - **Mudança aqui atinge todo consumidor de `@v1`** ao mover a tag. A entrada `runs-on` é JSON e tem que manter
   `"ubuntu-latest"` como padrão: consumidores de outras organizações não têm os runners.
-- **Um runner por VM.** Na mesma máquina, jobs disputam portas de serviço e o PHP global do `setup-php`. Para ganhar
-  capacidade, crie outra VM.
+- **Uma VM por job, descartada ao final.** Reaproveitar deixa arquivo gravado com root e abre caminho para capturar
+  segredos de outros repositórios; dois jobs na mesma VM disputam portas e o PHP global. Mais capacidade é mais
+  `ci-runner@N`.
 - **Runner nunca direto no host:** quem tem escrita em um repositório executa código nele (`docs/runners.md`).
 - **Repositório público:** nome real de máquina, tailnet ou IP público não entra em `infra/` nem em `docs/`.

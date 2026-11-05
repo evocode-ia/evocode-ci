@@ -1,0 +1,15 @@
+[Unit]
+Description=Runner descartável de CI número %i
+After=network-online.target libvirtd.service ci-runner-firewall.service
+Wants=network-online.target
+Requires=libvirtd.service ci-runner-firewall.service
+
+[Service]
+ExecStart=/usr/local/sbin/ci-runner-ciclo %i
+Restart=always
+RestartSec=15
+# Parar o serviço derruba o job em andamento.
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

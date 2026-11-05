@@ -1,7 +1,8 @@
 # Runners próprios
 
 Os builds rodam em máquinas nossas, pelo próprio GitHub Actions: os workflows, a aba Actions e os checks do PR
-continuam iguais. Só muda o `runs-on`. O motivo está na [ADR 0001](adr/0001-runners-proprios.md).
+continuam iguais. Só muda o `runs-on`. **Cada job roda em uma VM nova, descartada ao final.** O motivo está na
+[ADR 0001](adr/0001-runners-proprios.md).
 
 Este repositório é público: aqui entram a estrutura e os scripts, sem segredo nem endereço real de máquina.
 
@@ -28,41 +29,42 @@ jobs:
       php-version: "8.4"
 ```
 
-Sem essa entrada, o job roda no `ubuntu-latest`, com minutos pagos.
+Sem essa entrada, o job pede `ubuntu-latest`. Se os runners hospedados estiverem desligados na organização, ele fica
+em `queued`, sem falhar.
 
 ### O que muda em relação ao `ubuntu-latest`
 
-- **Sistema:** Ubuntu 24.04 com Docker, buildx, Compose, `git`, `jq` e `build-essential`. O resto vem pelas actions
-  de sempre (`setup-node`, `setup-php`, `setup-python`), que funcionam igual.
-- **A máquina não é nova a cada job.** O runner é reaproveitado, e uma limpeza roda antes e depois de cada job: apaga
-  workspace, `/tmp`, home, containers, volumes, redes e imagens com menos de um dia, o que inclui as construídas ali.
-  Nada do que um job deixa nesses lugares chega ao próximo, mas um arquivo fora deles, como em `/etc`, pode chegar.
+- **Sistema:** Ubuntu 24.04 com Docker, buildx, Compose, `git`, `jq`, `build-essential` e PHP 8.3, 8.4 e 8.5 já
+  instalados. O resto vem pelas actions de sempre (`setup-node`, `setup-python`), que funcionam igual.
+- **Imagens de serviço:** `mysql:8.4`, `percona/percona-server:8.4` e `pgvector/pgvector:pg16` já estão na VM. Outras são
+  baixadas a cada job, porque nada persiste. Se aparecer limite de downloads do Docker Hub, adicione a imagem em
+  `infra/runner-vm/user-data.yaml` e refaça a imagem-base.
 - **O cache do GitHub é lento aqui.** O download medido foi de 0,8 MB/s, e às vezes trava; a espera tem limite de 3
   minutos, e depois o job segue sem cache.
-- **Falta algo?** Instale no próprio job ou peça para adicionar em `infra/runner-vm/user-data.yaml`.
+- **Falta algo?** Instale no próprio job ou peça para adicionar à imagem-base.
 
 ### Onde acompanhar
 
 | O quê | Onde |
 |---|---|
 | Builds e logs | Aba **Actions** do repositório e checks do PR |
-| Estado dos runners | Settings → Actions → Runners, da organização |
+| Estado dos runners | Settings → Actions → Runners, da organização. O nome muda a cada job: `ci-runner-01-<horário>` |
 
 ## Devs externos
 
 Ninguém precisa de acesso às máquinas, à VPN nem aos segredos: basta a conta no GitHub, com acesso ao repositório.
 O dev abre o PR e vê o resultado nos checks, como em qualquer projeto.
 
-**Ao dar acesso, leve em conta:** quem tem permissão de escrita em **um** repositório executa código como root em um
-runner, porque basta alterar um workflow em uma branch. Um processo deixado ali pode capturar os segredos dos jobs
-seguintes, inclusive de **outros repositórios** que usam os mesmos runners. Dê escrita só a quem pode ter esse poder.
+**Ao dar acesso, leve em conta:** quem tem permissão de escrita em um repositório executa código como root na VM do
+job e consegue ler os segredos do Actions **daquele repositório**, porque basta alterar um workflow em uma branch.
+Isso vale para qualquer CI assim. A VM descartável impede que o código sobreviva e alcance jobs de outros repositórios.
 
 A permissão base da organização também conta: se ela for "escrita", todo membro tem esse poder em todo repositório.
 
 Não abra PR de fork nos runners sem revisar o workflow antes: quem só tem leitura também conseguiria executar código.
 
-**Ao retirar o acesso de alguém que tinha escrita:** avalie a rotação dos segredos de todos os repositórios que usam
-os runners, não só dos que a pessoa acessava.
+**Ao retirar o acesso de alguém que tinha escrita:** avalie a rotação dos segredos dos repositórios a que a pessoa tinha
+acesso.
 
 ## Como está montado
 
@@ -70,64 +72,68 @@ os runners, não só dos que a pessoa acessava.
 flowchart LR
   gh["GitHub Actions"]
   subgraph host["Host"]
+    ciclo["Serviço ci-runner@N<br/>guarda a credencial de registro"]
+    base[("Imagem-base<br/>somente leitura")]
     fw["Firewall ci-runner-firewall"]
     subgraph rede["Rede própria das VMs"]
-      r1["ci-runner-01<br/>1 runner"]
-      r2["ci-runner-02<br/>1 runner"]
-      r3["ci-runner-03<br/>1 runner"]
+      vm["VM ci-runner-0N<br/>um job e descarta"]
     end
   end
-  r1 & r2 & r3 -- "conexão de saída" --> fw --> gh
+  base -- "disco novo a cada job" --> vm
+  ciclo -- "configuração de uso único" --> vm
+  vm -- "conexão de saída" --> fw --> gh
+  ciclo -- "pede a configuração" --> gh
 ```
 
 | Peça | Onde | O que faz |
 |---|---|---|
-| `infra/runner-vm/criar-vm.sh` | Roda no host | Instala QEMU e libvirt, cria a rede isolada e uma VM Ubuntu |
-| `infra/runner-vm/firewall.sh` | Serviço `ci-runner-firewall` no host | Regras que isolam a rede das VMs |
-| `infra/runner-vm/instalar-runners.sh` | Roda no host | Registra o runner na organização |
-| `infra/runner-vm/runners-na-vm.sh` | Chamado pelo anterior, na VM | Instala e inicia o runner |
-| `infra/runner-vm/limpa-job.sh` | Na VM, antes e depois de cada job | Remove o que o job deixou |
-| `infra/runner-vm/user-data.yaml` | Primeiro boot da VM | Pacotes e usuário de administração |
+| `infra/runner-vm/instalar.sh` | Roda no host | Instala QEMU e libvirt, cria a rede isolada, monta a imagem-base e liga os serviços |
+| `infra/runner-vm/ciclo-runner.sh` | Serviço `ci-runner@N` | Cria a VM, registra para um job, espera, descarta e recomeça |
+| `infra/runner-vm/firewall.sh` | Serviço `ci-runner-firewall` | Regras que isolam a rede das VMs |
+| `infra/runner-vm/user-data.yaml` | Montagem da imagem-base | Pacotes, PHP, imagens de serviço e o runner |
 
-Os runners não recebem conexão de fora: eles buscam trabalho no GitHub. Nenhuma porta é aberta no host.
+### O ciclo de um runner
 
-O firewall sobe antes do `libvirtd`, que liga as VMs, e fecha tudo até descobrir a rota padrão. Os bloqueios ficam em
-uma tabela `nft` própria, com prioridade anterior à do iptables: continuam valendo quando o Docker ou o Tailscale
-reordenam as próprias regras ao reiniciar. Se o serviço `nftables` do host for habilitado com o `flush ruleset`
-padrão, essa tabela é apagada.
+1. O disco da VM é recriado, por cima da imagem-base, que nunca é alterada.
+2. A VM sobe e o serviço pede ao GitHub uma configuração de uso único (`generate-jitconfig`).
+3. O runner recebe um job, roda e termina.
+4. A VM é destruída e o ciclo recomeça. A VM leva cerca de 30 segundos para ficar pronta.
 
-### Por que uma VM por runner
+A credencial que pede a configuração fica no host, fora do alcance do job. Os runners não recebem conexão de fora:
+buscam trabalho no GitHub. Nenhuma porta é aberta no host.
 
-Dois jobs na mesma máquina se atrapalham: disputam portas de serviço como `3306:3306`, e o `setup-php` troca o PHP
-da máquina inteira, o que derrubaria um job de outro projeto com outra versão. No GitHub, cada job tem sua máquina;
-aqui, o efeito é o mesmo com uma VM por runner. **Não aumente `CI_RUNNERS` para ganhar capacidade: crie outra VM.**
+O firewall sobe antes do `libvirtd` e fecha tudo até descobrir a rota padrão. Os bloqueios ficam em uma tabela `nft`
+própria, com prioridade anterior à do iptables: continuam valendo quando o Docker ou o Tailscale reordenam as próprias
+regras ao reiniciar. Se o serviço `nftables` do host for habilitado com o `flush ruleset` padrão, essa tabela é apagada.
 
 ## Segurança
 
-**Premissa:** quem tem escrita em um repositório executa código nos runners. A VM é tratada como máquina que pode ser
-comprometida, e o estrago precisa ficar nela.
+**Premissa:** quem tem escrita em um repositório executa código como root na VM do job. A VM é tratada como máquina
+comprometida, e o estrago precisa ficar nela e acabar com ela.
 
 | Proteção | Como |
 |---|---|
-| Sem acesso ao host | VM separada, sem chave SSH, `gh` nem arquivo do host; tabela `nft` `ci_vm` |
+| Nada passa de um job para o outro | Disco novo a cada job, a partir de imagem somente leitura |
+| Sem credencial de registro na VM | Só uma configuração de uso único, entregue pela entrada padrão |
+| Sem acesso ao host | VM separada, sem arquivo do host; tabela `nft` `ci_vm` |
 | Sem acesso à rede local e à tailnet | A mesma tabela bloqueia redes privadas, `100.64.0.0/10`, metadata, IPv6 e a sub-rede pública do host |
 | Sem acesso entre as VMs | Portas isoladas na bridge (`port isolated`) |
 | Sem repositório público nos runners | Grupo de runners com `allows_public_repositories: false` |
-| Administração só do host para a VM | Chave SSH; a VM não abre conexão de volta |
+| Identidade da VM conferida | Chave de host fixa na imagem-base, conferida a cada conexão; chave de administração só para isto |
 
-**O que continua aberto, e é preciso decidir conscientemente:**
+**O que continua aberto:**
 
-- **Um job malicioso persiste na VM.** O runner tem `sudo`, como no `ubuntu-latest`, e a limpeza não alcança tudo. Um
-  processo escondido lê os segredos dos jobs seguintes, de qualquer repositório, e pode copiar as credenciais do
-  runner para operá-lo de fora. **Rótulo não é fronteira de segurança.** Enquanto isso valer, segredo de alto impacto,
-  como o de publicação, deveria ficar em runner à parte ou no `ubuntu-latest`.
-- **O disco é compartilhado.** A soma dos discos das VMs não deve se aproximar do espaço livre do host: jobs que
-  escrevem até o limite podem esgotá-lo.
+- **Segredos do repositório do próprio job.** Quem tem escrita consegue lê-los, como em qualquer CI.
+- **A chave de host é a mesma em todas as VMs.** Um job com root pode copiá-la. Como as VMs são isoladas entre si e
+  descartáveis, isso não abre caminho para outro job.
+- **Credencial no host.** O `gh` do usuário `CI_GH_USER` precisa do escopo `admin:org` para o serviço funcionar.
+  Protege-se com o acesso ao próprio host.
 - **Internet.** O job alcança a internet livremente, como no `ubuntu-latest`.
+- **Disco.** Cada VM usa até 200 GB. Mantenha a soma longe do espaço livre do host: jobs que escrevem até o limite
+  podem esgotá-lo.
 
-**Em caso de incidente:** remova o runner em Settings → Actions → Runners, recrie a VM e faça a rotação dos segredos de
-todos os repositórios que usam os runners. Só recriar a VM não basta, porque uma credencial copiada segue válida até a
-remoção no GitHub.
+**Em caso de incidente:** pare o serviço `ci-runner@N`, confira em Settings → Actions → Runners se sobrou algum runner e
+faça a rotação dos segredos do repositório envolvido.
 
 **Depois de mudar o firewall, repita o teste de isolamento** (abaixo).
 
@@ -135,47 +141,53 @@ remoção no GitHub.
 
 Comandos rodados no host, por quem administra.
 
-### Criar uma VM e registrar o runner
+### Instalar
 
-Serve para ampliar a capacidade. Use o próximo nome e IP livres, e o hash de `noble-server-cloudimg-amd64.img`
-publicado em `https://cloud-images.ubuntu.com/noble/current/SHA256SUMS`:
-
-```bash
-sudo CI_VM_NAME=ci-runner-04 CI_VM_IP=10.77.0.13 CI_VM_IMG_SHA256=HASH CI_VM_SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)" infra/runner-vm/criar-vm.sh
-```
-
-Espere o primeiro boot terminar (`cloud-init status`), depois:
+Use o hash de `noble-server-cloudimg-amd64.img` publicado em
+`https://cloud-images.ubuntu.com/noble/current/SHA256SUMS`. `CI_GH_USER` é o usuário do host cujo `gh` tem `admin:org`:
 
 ```bash
-CI_ORG=evocode-ia CI_VM_IP=10.77.0.13 infra/runner-vm/instalar-runners.sh
+sudo CI_ORG=evocode-ia CI_GH_USER=USUARIO CI_RUNNERS=3 CI_VM_IMG_SHA256=HASH infra/runner-vm/instalar.sh
 ```
 
-O `gh` do host precisa do escopo `admin:org`. Em servidor sem navegador, o comando abaixo evita ficar preso em um
-navegador de texto; depois de apertar Enter, autorize o código em `https://github.com/login/device`:
+Para dar `admin:org` ao `gh` em servidor sem navegador, rode o comando abaixo como `CI_GH_USER`, aperte Enter e
+autorize o código em `https://github.com/login/device`:
 
 ```bash
 GH_BROWSER=true gh auth refresh -h github.com -s admin:org
 ```
 
-Ao terminar de registrar, retire o escopo, para o login do host não ficar com esse poder:
+**Dimensione pela memória:** cada runner usa até 6 vCPU e 10 GB de RAM. Um runner atende um job por vez.
+
+### Mudar a capacidade
 
 ```bash
-GH_BROWSER=true gh auth refresh -h github.com -r admin:org
+sudo systemctl enable --now ci-runner@4
 ```
 
-Cada organização tem os próprios runners: um runner registrado em uma não atende as outras. **Não confirmado:** o
-GitHub só documenta runner próprio em workflow reutilizável quando ele é da mesma organização de quem chama. Em outra
-organização, teste com um consumidor real antes de passar `runs-on` a este repositório.
+```bash
+sudo systemctl disable --now ci-runner@4
+```
+
+Vão de 1 a 10. **Parar o serviço derruba o job em andamento.** Cada organização precisa dos próprios runners; para outra,
+é preciso outra instalação.
+
+**Não confirmado:** o GitHub só documenta runner próprio em workflow reutilizável quando ele é da mesma organização de
+quem chama. Em outra organização, teste com um consumidor real antes de passar `runs-on` a este repositório.
+
+### Atualizar a imagem-base
+
+Refaz a imagem com pacotes novos. Rode de novo o `instalar.sh`: ele reinicia os serviços, então espere a fila esvaziar.
 
 ### Migrar de servidor
 
 Os runners não guardam nada que precise ser levado, então não há backup a restaurar:
 
-1. No servidor novo, crie as VMs e registre os runners como acima. A partir daí, os dois servidores atendem jobs.
-2. No antigo, remova cada runner em **Settings → Actions → Runners** e apague as VMs:
+1. No servidor novo, rode o `instalar.sh`. A partir daí, os dois servidores atendem jobs.
+2. No antigo, pare os serviços e apague as VMs:
 
    ```bash
-   sudo virsh destroy ci-runner-01
+   sudo systemctl disable --now ci-runner@1 ci-runner@2 ci-runner@3
    ```
 
    ```bash
@@ -198,6 +210,12 @@ IP público, uma porta publicada pelo Docker do host, uma máquina da tailnet, u
 timeout 4 bash -c 'exec 3<>/dev/tcp/ENDERECO/PORTA' && echo VAZOU || echo bloqueado
 ```
 
+Para entrar em uma VM:
+
+```bash
+sudo ssh -i /etc/evocode-ci/vm_ed25519 -o UserKnownHostsFile=/etc/evocode-ci/vm_known_hosts ci@10.77.0.10
+```
+
 Repita depois de reiniciar o host, o Docker ou o Tailscale.
 
 ### Rotina
@@ -205,26 +223,21 @@ Repita depois de reiniciar o host, o Docker ou o Tailscale.
 | Tarefa | Como |
 |---|---|
 | Ver as VMs | `sudo virsh list --all` |
-| Entrar em uma VM | `ssh ci@IP-DA-VM` |
-| Ver o runner | `systemctl status 'actions.runner.*'`, na VM |
-| Limpar o disco | Automático: `/etc/cron.daily/ci-runner-limpeza` remove imagens com mais de uma semana |
-| Atualizar o runner | Automático: ele se atualiza sozinho |
-| Atualizar o sistema | `sudo apt upgrade`, na VM, ou recrie a VM |
-| Recriar uma VM suja | Remova, como em "Migrar de servidor", e crie de novo com o mesmo nome |
+| Ver um runner | `systemctl status ci-runner@1` e `journalctl -u ci-runner@1` |
+| Atualizar o runner | Automático, mas volta à versão da imagem-base a cada job: refaça a imagem de tempos em tempos |
+| Limpar disco | Automático: o disco da VM é refeito a cada job |
 
 ### Problemas comuns
 
 | Sintoma | Verifique |
 |---|---|
-| Job parado em "Waiting for a runner" | Runner offline ou ocupado. Veja Settings → Runners; crie outra VM se for fila |
-| Job com `ubuntu-latest` sempre em `queued` | Com os runners hospedados desligados na organização, o job não falha: espera e não recebe máquina. Troque o `runs-on` |
-| Job em `queued` em repositório público | Os runners próprios não atendem repositório público (`allows_public_repositories: false`) |
-| Job falha sozinho depois de 10 minutos | A VM caiu com ele em andamento. O job não é repetido: dispare de novo. O runner volta e aceita o próximo |
-| VM desligada depois de reiniciar | VM criada antes da correção do primeiro boot. Rode `virsh start` uma vez; daí em diante, reinício funciona |
+| Job parado em "Waiting for a runner" | Runner ocupado ou serviço parado. Veja `systemctl status 'ci-runner@*'`; aumente a capacidade se for fila |
+| `ci-runner@N` em erro de configuração | O `gh` de `CI_GH_USER` sem `admin:org`: o log mostra que o GitHub não entregou a configuração |
+| Job com `ubuntu-latest` sempre em `queued` | Runners hospedados desligados na organização: troque o `runs-on` |
+| Job em `queued` em repositório público | Os runners próprios não atendem repositório público |
+| Job falha sozinho depois de 10 minutos | A VM caiu com ele em andamento. O job não é repetido: dispare de novo. O serviço recria a VM sozinho |
 | `startup_failure`, sem job criado | Cobrança da organização. O erro só aparece na página do run, na web: confira **Payment information** |
 | VM sem internet | `sudo systemctl restart ci-runner-firewall`; depois, `sudo virsh net-list` |
-| Porta de serviço já em uso | Existe mais de um runner na VM, ou sobrou um container: `docker ps -a` |
-| Disco cheio | `docker system df` e `docker system prune -af`, na VM |
 
 ## Custo
 

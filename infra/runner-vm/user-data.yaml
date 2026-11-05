@@ -1,16 +1,31 @@
 #cloud-config
-hostname: @NOME@
+# Imagem-base dos runners. Só roda uma vez, na VM temporária de instalar.sh: depois, cloud-init fica desligado.
+hostname: ci-runner
 manage_etc_hosts: true
 ssh_pwauth: false
 disable_root: true
+ssh_deletekeys: true
+ssh_genkeytypes: []
+ssh_keys:
+  ed25519_private: |
+@CHAVE_HOST_PRIV@
+  ed25519_public: @CHAVE_HOST_PUB@
 users:
   - name: ci
     shell: /bin/bash
-    # Administração, a partir do host. A VM é descartável e não guarda nada pessoal: sudo sem senha aqui é aceitável.
+    # Administração, a partir do host, com chave que só existe para isto.
     sudo: ALL=(ALL) NOPASSWD:ALL
     lock_passwd: true
     ssh_authorized_keys:
-      - @CHAVE@
+      - @CHAVE_ADMIN@
+  - name: runner
+    shell: /bin/bash
+    groups: [docker]
+    # Os workflows esperam sudo sem senha, como no ubuntu-latest. A VM é descartada ao fim de cada job.
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+groups:
+  - docker
 package_update: true
 package_upgrade: true
 packages:
@@ -24,13 +39,40 @@ packages:
   - libicu74
   - python3
   - python3-venv
+  - software-properties-common
   - unzip
   - zip
+write_files:
+  - path: /opt/preparo-base.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      # PHP já instalado: como a VM é nova a cada job, sem isto o setup-php gastaria minutos em todo job.
+      add-apt-repository -y ppa:ondrej/php
+      apt-get update -qq
+      for v in 8.3 8.4 8.5; do
+        apt-get install -y -qq --no-install-recommends \
+          php$v-cli php$v-common php$v-curl php$v-mbstring php$v-xml php$v-zip php$v-mysql php$v-pgsql \
+          php$v-sqlite3 php$v-intl php$v-bcmath php$v-gd php$v-redis
+      done
+      systemctl enable --now docker
+      # Imagens de serviço comuns: sem isto, cada job baixa de novo e bate no limite de downloads do Docker Hub.
+      for img in mysql:8.4 percona/percona-server:8.4 pgvector/pgvector:pg16 alpine:3.24; do
+        docker pull -q "$img" || echo "aviso: não baixei $img"
+      done
+      install -d -o runner -g runner /opt/actions-runner/r1 /opt/hostedtoolcache
+      curl -fsSL -o /tmp/r.tgz "https://github.com/actions/runner/releases/download/v@RUNNER_VERSAO@/actions-runner-linux-x64-@RUNNER_VERSAO@.tar.gz"
+      echo "@RUNNER_SHA@  /tmp/r.tgz" | sha256sum -c -
+      sudo -u runner tar -xzf /tmp/r.tgz -C /opt/actions-runner/r1
+      rm -f /tmp/r.tgz
+      # O download do cache do GitHub pode travar. Sem limite, o job espera 10 minutos antes de seguir sem cache.
+      printf '%s\n' AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache SEGMENT_DOWNLOAD_TIMEOUT_MINS=3 >/opt/actions-runner/r1/.env
+      chown runner:runner /opt/actions-runner/r1/.env
+      touch /etc/cloud/cloud-init.disabled
 runcmd:
-  - systemctl enable --now docker
-final_message: "ci-runner pronto"
-# Termina o primeiro boot desligando: criar-vm.sh religa a VM com a configuração definitiva.
+  - /opt/preparo-base.sh > /var/log/preparo-base.log 2>&1
 power_state:
   mode: poweroff
-  message: fim do primeiro boot
+  message: imagem-base pronta
   condition: true
