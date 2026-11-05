@@ -15,6 +15,11 @@ name: Laravel CI
 on:
   workflow_call:
     inputs:
+      runs-on:
+        description: 'Onde rodar, em JSON. Runner próprio: ''["self-hosted","evocode-linux"]''. O padrão usa minutos pagos do GitHub.'
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
       php-version:
         description: 'Versão do PHP. Tem que ser a que o composer.lock exige, não a declarada no composer.json.'
         required: true
@@ -106,7 +111,7 @@ env:
 jobs:
   qualidade:
     name: Qualidade
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 15
     defaults:
       run:
@@ -184,7 +189,7 @@ jobs:
   testes:
     name: Testes
     if: ${{ ! inputs.mysql }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 20
     defaults:
       run:
@@ -243,7 +248,7 @@ jobs:
   testes-mysql:
     name: Testes
     if: ${{ inputs.mysql }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 25
     defaults:
       run:

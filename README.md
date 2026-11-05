@@ -236,6 +236,7 @@ jobs:
 
 | Entrada | Tipo | Padrão | O que faz |
 |---|---|---|---|
+| `runs-on` | string | `"ubuntu-latest"` | Onde rodar, em JSON. Runner próprio: `'["self-hosted","evocode-linux"]'`. O padrão usa minutos pagos do GitHub. |
 | `php-version` | string | — (obrigatória) | Versão do PHP. Use a que o `composer.lock` exige, não a declarada no `composer.json`. |
 | `node-version` | string | `24` | Versão do Node. |
 | `working-directory` | string | `.` | Diretório do Laravel, quando ele não fica na raiz do repositório. |
@@ -293,6 +294,7 @@ jobs:
 
 | Entrada | Padrão | O que faz |
 |---|---|---|
+| `runs-on` | `"ubuntu-latest"` | Onde rodar, em JSON. Runner próprio: `'["self-hosted","evocode-linux"]'`. O padrão usa minutos pagos do GitHub. |
 | `tags` | — (obrigatória) | Tags completas (`repo:tag`), uma por linha. |
 | `username` | — (obrigatória) | Usuário do Docker Hub. Passe `vars.DOCKERHUB_USERNAME`. |
 | `context` | `.` | Contexto do build. |

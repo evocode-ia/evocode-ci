@@ -32,6 +32,13 @@ name: Reusable - publish image (Docker Hub)
 on:
   workflow_call:
     inputs:
+      runs-on:
+        description: >-
+          Onde rodar, em JSON. Runner próprio: `["self-hosted","evocode-linux"]`.
+          O padrão usa minutos pagos do GitHub.
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
       tags:
         description: >-
           Tags completas (`repo:tag`), uma por linha — mesmo formato que
@@ -123,7 +130,7 @@ permissions:
 jobs:
   publish-image:
     name: Publish image (Docker Hub)
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 45
     permissions:
       contents: read
