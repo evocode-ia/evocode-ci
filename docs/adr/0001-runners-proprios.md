@@ -29,5 +29,6 @@ job roda em uma VM nova, criada de uma imagem somente leitura e descartada ao fi
 - O servidor passa a concentrar desenvolvimento e builds, e a capacidade dele limita os dois.
 - Cada job paga o custo de uma VM nova: cerca de 30 segundos, e sem cache local. Parte disso é compensada pela imagem-base,
   que já traz PHP e imagens de serviço.
-- O serviço precisa de uma credencial com `admin:org` no host para pedir a configuração de cada runner.
+- O serviço precisa de uma credencial no host para pedir a configuração de cada runner. Basta um token só com permissão
+  de runners; o `gh` com `admin:org` é o caminho mais simples, e o mais amplo.
 - A taxa por minuto de runner próprio, anunciada e adiada pelo GitHub, pode voltar. Se isso ocorrer, reavalie.

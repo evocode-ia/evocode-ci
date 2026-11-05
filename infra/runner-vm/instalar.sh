@@ -30,6 +30,23 @@ RUNNER_SHA=baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40
 # Com 0, só monta a imagem-base, sem mexer nos serviços.
 [[ "$RUNNERS" -ge 0 && "$RUNNERS" -le 10 ]] || { echo "erro: CI_RUNNERS vai de 0 a 10." >&2; exit 1; }
 
+# Cada VM pode usar 10 GB de RAM e 120 GB de disco. Sem folga no host, um job pesado derruba o desenvolvimento.
+RAM_TOTAL_GB=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1048576 ))
+DISCO_LIVRE_GB=$(df --output=avail -BG /var/lib | tail -1 | tr -dc '0-9')
+if (( RUNNERS * 10 + 16 > RAM_TOTAL_GB )); then
+  echo "erro: $RUNNERS runners pedem $(( RUNNERS * 10 )) GB de RAM, e o host tem $RAM_TOTAL_GB GB." >&2
+  exit 1
+fi
+if (( RUNNERS * 120 + 50 > DISCO_LIVRE_GB )); then
+  echo "erro: $RUNNERS runners podem usar $(( RUNNERS * 120 )) GB de disco, e há $DISCO_LIVRE_GB GB livres." >&2
+  exit 1
+fi
+
+# A imagem-base nasce na mesma rede dos runners: nenhum job roda enquanto isso.
+for unidade in $(systemctl list-units --plain --no-legend 'ci-runner@*' 2>/dev/null | awk '{print $1}'); do
+  systemctl stop "$unidade"
+done
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
@@ -104,11 +121,11 @@ virsh undefine "$BASE_NOME" --remove-all-storage >/dev/null 2>&1 || true
 NOVA="$DIR/$BASE_NOME-nova.qcow2"
 rm -f "$NOVA"
 qemu-img convert -O qcow2 "$IMG" "$NOVA"
-qemu-img resize -q "$NOVA" 200G
+qemu-img resize -q "$NOVA" 120G
 virt-install --quiet --name "$BASE_NOME" --osinfo ubuntu24.04 \
   --vcpus 6 --memory 8192 --cpu host-passthrough \
   --disk "path=$NOVA,bus=virtio" --import \
-  --network "network=$REDE,model=virtio,mac=52:54:00:77:00:09" \
+  --network "network=$REDE,model=virtio,mac=52:54:00:77:00:09,target.dev=civm00" \
   --cloud-init "user-data=$SEED/user-data,network-config=$SEED/network-config" \
   --graphics none --console pty,target_type=serial --noautoconsole
 echo "Montando a imagem-base: leva alguns minutos."

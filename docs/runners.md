@@ -57,9 +57,11 @@ O dev abre o PR e vê o resultado nos checks, como em qualquer projeto.
 
 **Ao dar acesso, leve em conta:** quem tem permissão de escrita em um repositório executa código como root na VM do
 job e consegue ler os segredos do Actions **daquele repositório**, porque basta alterar um workflow em uma branch.
-Isso vale para qualquer CI assim. A VM descartável impede que o código sobreviva e alcance jobs de outros repositórios.
+Isso vale para qualquer CI assim. A VM descartável e a amarração de IP por porta existem para esse código não sobreviver
+ao job nem alcançar jobs de outros repositórios.
 
-A permissão base da organização também conta: se ela for "escrita", todo membro tem esse poder em todo repositório.
+A permissão base da organização também conta: se ela for "escrita", todo membro tem esse poder em todo repositório, e uma
+senha roubada basta sem 2FA obrigatório.
 
 Não abra PR de fork nos runners sem revisar o workflow antes: quem só tem leitura também conseguiria executar código.
 
@@ -99,12 +101,21 @@ flowchart LR
 3. O runner recebe um job, roda e termina.
 4. A VM é destruída e o ciclo recomeça. A VM leva cerca de 30 segundos para ficar pronta.
 
+O host não confia na VM para saber que acabou: confere no GitHub se o runner ainda existe e destrói a VM quando ele some,
+ou ao passar de 8 horas de vida.
+
 A credencial que pede a configuração fica no host, fora do alcance do job. Os runners não recebem conexão de fora:
 buscam trabalho no GitHub. Nenhuma porta é aberta no host.
 
-O firewall sobe antes do `libvirtd` e fecha tudo até descobrir a rota padrão. Os bloqueios ficam em uma tabela `nft`
-própria, com prioridade anterior à do iptables: continuam valendo quando o Docker ou o Tailscale reordenam as próprias
-regras ao reiniciar. Se o serviço `nftables` do host for habilitado com o `flush ruleset` padrão, essa tabela é apagada.
+O firewall sobe antes do `libvirtd` e fecha tudo até descobrir a rota padrão. São duas tabelas `nft` próprias:
+
+- **`ci_vm`:** bloqueios de IP, com prioridade anterior à do iptables. Continuam valendo quando o Docker ou o Tailscale
+  reordenam as próprias regras ao reiniciar.
+- **`ci_vm_l2`:** amarra cada porta da rede (`civmNN`) ao MAC e ao IP da própria VM. Sem ela, um job com root assume o IP
+  de outra VM e recebe do host a configuração de registro que era dela.
+
+Se o serviço `nftables` do host for habilitado com o `flush ruleset` padrão, as duas tabelas são apagadas, e parte do
+isolamento cai. O ciclo confere isso: sem as tabelas, destrói a VM em execução e não sobe outra.
 
 ## Segurança
 
@@ -117,23 +128,29 @@ comprometida, e o estrago precisa ficar nela e acabar com ela.
 | Sem credencial de registro na VM | Só uma configuração de uso único, entregue pela entrada padrão |
 | Sem acesso ao host | VM separada, sem arquivo do host; tabela `nft` `ci_vm` |
 | Sem acesso à rede local e à tailnet | A mesma tabela bloqueia redes privadas, `100.64.0.0/10`, metadata, IPv6 e a sub-rede pública do host |
-| Sem acesso entre as VMs | Portas isoladas na bridge (`port isolated`) |
-| Sem repositório público nos runners | Grupo de runners com `allows_public_repositories: false` |
-| Identidade da VM conferida | Chave de host fixa na imagem-base, conferida a cada conexão; chave de administração só para isto |
+| Sem acesso entre as VMs | Portas isoladas na bridge (`port isolated`) e IP e MAC amarrados por porta (`ci_vm_l2`) |
+| Sem assumir outra VM | `ci_vm_l2` descarta MAC, ARP e IP de origem que não sejam os da própria porta |
+| Teto de conexões por VM | Protege a tabela de conexões, que é compartilhada com o host |
+| Sem virtualização aninhada | `disable=svm`: menos superfície do KVM do host |
+| Sem repositório público nos runners | Grupo com `allows_public_repositories: false`; o ciclo recusa registrar se isso mudar |
+| Chaves só para isto | A de administração não é pessoal, e a de host é conferida a cada conexão |
 
 **O que continua aberto:**
 
 - **Segredos do repositório do próprio job.** Quem tem escrita consegue lê-los, como em qualquer CI.
-- **A chave de host é a mesma em todas as VMs.** Um job com root pode copiá-la. Como as VMs são isoladas entre si e
-  descartáveis, isso não abre caminho para outro job.
-- **Credencial no host.** O `gh` do usuário `CI_GH_USER` precisa do escopo `admin:org` para o serviço funcionar.
-  Protege-se com o acesso ao próprio host.
-- **Internet.** O job alcança a internet livremente, como no `ubuntu-latest`.
-- **Disco.** Cada VM usa até 200 GB. Mantenha a soma longe do espaço livre do host: jobs que escrevem até o limite
-  podem esgotá-lo.
+- **A chave de host é a mesma em todas as VMs.** Um job com root pode copiá-la. A garantia de que o host fala com a VM
+  certa vem da amarração de IP por porta, não dessa chave.
+- **Credencial no host.** Sem `/etc/evocode-ci/gh-token`, o serviço usa o `gh` de `CI_GH_USER`, que precisa de `admin:org`:
+  qualquer processo desse usuário vira administrador da organização. Prefira um PAT fine-grained só com permissão de
+  **Self-hosted runners**, em arquivo modo 600 de root, e retire `admin:org` do login pessoal.
+- **Saída pela internet com o IP do servidor.** Ao contrário do `ubuntu-latest`, o job sai com o IP deste host. Se algum
+  serviço libera esse IP em allowlist (SSH, banco, painel), o job herda a confiança: revise essas listas. E-mail (25, 465 e
+  587) fica bloqueado.
+- **Sem teto de banda e de I/O.** Um job pode ocupar a rede e o disco do host enquanto roda.
+- **Disco.** Cada VM usa até 120 GB. O `instalar.sh` confere o espaço livre, mas ele continua dividido com o host.
 
-**Em caso de incidente:** pare o serviço `ci-runner@N`, confira em Settings → Actions → Runners se sobrou algum runner e
-faça a rotação dos segredos do repositório envolvido.
+**Em caso de incidente:** pare o serviço `ci-runner@N`, confira em Settings → Actions → Runners se sobrou algum runner,
+remova-o e faça a rotação dos segredos do repositório envolvido.
 
 **Depois de mudar o firewall, repita o teste de isolamento** (abaixo).
 
@@ -169,8 +186,8 @@ sudo systemctl enable --now ci-runner@4
 sudo systemctl disable --now ci-runner@4
 ```
 
-Vão de 1 a 10. **Parar o serviço derruba o job em andamento.** Cada organização precisa dos próprios runners; para outra,
-é preciso outra instalação.
+Vão de 1 a 10; confira a memória antes de subir mais um, porque só o `instalar.sh` faz essa checagem. **Parar o serviço
+derruba o job em andamento.** Cada organização precisa dos próprios runners; para outra, é preciso outra instalação.
 
 **Não confirmado:** o GitHub só documenta runner próprio em workflow reutilizável quando ele é da mesma organização de
 quem chama. Em outra organização, teste com um consumidor real antes de passar `runs-on` a este repositório.
@@ -194,8 +211,7 @@ Os runners não guardam nada que precise ser levado, então não há backup a re
    sudo virsh undefine ci-runner-01 --remove-all-storage
    ```
 
-3. Para remover o isolamento do servidor antigo, se ele continuar em uso. Isso remove as regras e também para o
-   `libvirtd`:
+3. Para remover o isolamento do servidor antigo, se ele continuar em uso:
 
    ```bash
    sudo systemctl disable --now ci-runner-firewall
