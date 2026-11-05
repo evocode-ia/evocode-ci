@@ -252,6 +252,7 @@ Repita depois de reiniciar o host, o Docker ou o Tailscale.
 | Job com `ubuntu-latest` sempre em `queued` | Runners hospedados desligados na organização: troque o `runs-on` |
 | Job em `queued` em repositório público | Os runners próprios não atendem repositório público |
 | Job falha sozinho depois de 10 minutos | A VM caiu com ele em andamento. O job não é repetido: dispare de novo. O serviço recria a VM sozinho |
+| Teste de frontend falha por tempo, às vezes | O host está sob carga, porque os runners dividem a CPU com o desenvolvimento e outras VMs. Medido com load acima de 15: 3 de 1553 testes estouraram 5 s. Repita o job; se for frequente, reduza runners ou aumente o limite de tempo no projeto |
 | `startup_failure`, sem job criado | Cobrança da organização. O erro só aparece na página do run, na web: confira **Payment information** |
 | VM sem internet | `sudo systemctl restart ci-runner-firewall`; depois, `sudo virsh net-list` |
 
