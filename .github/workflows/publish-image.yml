@@ -120,6 +120,17 @@ on:
         required: false
         type: string
         default: publish-image
+      timeout-minutes:
+        description: >-
+          Teto do job, em minutos. O padrão serve a imagem comum. Imagem com
+          camadas de gigabytes, construída em runner próprio com rede lenta
+          até o cache `type=gha` ou até a origem dos modelos, pede mais: em
+          23/11/2026 a do rag-sync do agentenoc precisou de ~3,5 h só para
+          baixar ~115 MB do cache e ~530 MB de modelos do Hugging Face, a
+          ~50 KB/s, e era cancelada aos 45 min em todo merge.
+        required: false
+        type: number
+        default: 45
     secrets:
       DOCKERHUB_TOKEN:
         required: true
@@ -131,7 +142,7 @@ jobs:
   publish-image:
     name: Publish image (Docker Hub)
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: read
     steps:

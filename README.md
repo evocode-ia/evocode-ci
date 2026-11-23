@@ -291,6 +291,7 @@ jobs:
       short-description: ""
       readme-filepath: ./README.md
       cache-scope: publish-image
+      timeout-minutes: 45
     secrets:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 ```
@@ -310,6 +311,7 @@ jobs:
 | `short-description` | vazio | Descrição curta do repositório no Docker Hub. |
 | `readme-filepath` | `./README.md` | Caminho do README publicado como descrição longa. |
 | `cache-scope` | `publish-image` | Escopo do cache `type=gha`, isolado do namespace padrão. |
+| `timeout-minutes` | `45` | Teto do job, em minutos. Suba só para imagem de gigabytes em runner com rede lenta até o cache ou a origem dos modelos. |
 
 Secret obrigatório: `DOCKERHUB_TOKEN`.
 
