@@ -1,6 +1,8 @@
-name: Reusable - publish image (Docker Hub)
+name: Reusable - publish image
 
-# Publicação de imagem no Docker Hub, em um lugar só.
+# Publicação de imagem no Docker Hub ou no GitHub Container Registry, em um
+# lugar só. O registry vem do input `registry` (`docker.io`, o padrão, ou
+# `ghcr.io`); ver a ADR-0012 da camada nexthop-dev-standards.
 #
 # Antes deste arquivo o job vivia copiado em cada projeto (kairo, tracelog,
 # agentenoc, painel-agentenoc, ia-mcps, http-mcps, helpdesk). Cópia diverge:
@@ -28,10 +30,33 @@ name: Reusable - publish image (Docker Hub)
 # job que autentica no Docker Hub e roda com `push: true`. Tag de major é
 # ponteiro móvel — repositório da action comprometido muda o que estes passos
 # fazem sem mudar uma linha aqui.
+#
+# PERMISSÕES VÊM DE QUEM CHAMA. Este arquivo não declara `permissions`: um
+# workflow chamado só pode manter ou reduzir o que o job chamador concedeu,
+# nunca ampliar. Declarar `packages: write` aqui pediria mais do que os
+# chamadores do Docker Hub concedem (todos fixam `contents: read`), e declarar
+# só `contents: read` cortaria o `packages: write` de que o GHCR precisa. Quem
+# publica no GHCR concede, no job que chama:
+#
+#   permissions:
+#     contents: read
+#     packages: write
+#
+# Quem publica no Docker Hub não muda nada.
 
 on:
   workflow_call:
     inputs:
+      registry:
+        description: >-
+          Registry de destino: `docker.io` (padrão) ou `ghcr.io`. No `ghcr.io`
+          o login usa o `GITHUB_TOKEN` do job chamador, que precisa conceder
+          `packages: write`, e o usuário é o ator do workflow; `username` e o
+          secret `DOCKERHUB_TOKEN` ficam sem uso. As tags têm de começar pelo
+          mesmo registry (`ghcr.io/<dono>/<imagem>:<tag>`), em minúsculas.
+        required: false
+        type: string
+        default: docker.io
       runs-on:
         description: >-
           Onde rodar, em JSON. Runner próprio: `["self-hosted","evocode-linux"]`.
@@ -50,11 +75,13 @@ on:
         description: >-
           Nome de usuário do Docker Hub. Passe a variável do repositório
           `vars.DOCKERHUB_USERNAME` — NÃO um secret. Ver o comentário no topo.
+          Obrigatório com `registry: docker.io`; ignorado com `ghcr.io`.
           (Sem a sintaxe de expressão nesta descrição de propósito: o GitHub a
           avalia mesmo aqui, e um exemplo escrito por extenso invalida o
           arquivo inteiro antes de qualquer job começar.)
-        required: true
+        required: false
         type: string
+        default: ''
       context:
         description: Contexto do build.
         required: false
@@ -97,7 +124,8 @@ on:
       description-repository:
         description: >-
           `namespace/repo` cuja descrição no Docker Hub deve ser atualizada a
-          partir do README. Vazio desliga o passo.
+          partir do README. Vazio desliga o passo. Só vale com
+          `registry: docker.io`; com `ghcr.io` o pré-voo recusa.
         required: false
         type: string
         default: ''
@@ -133,22 +161,83 @@ on:
         default: 45
     secrets:
       DOCKERHUB_TOKEN:
-        required: true
-
-permissions:
-  contents: read
+        description: >-
+          Token do Docker Hub (Read & Write). Obrigatório com
+          `registry: docker.io`.
+        required: false
 
 jobs:
   publish-image:
-    name: Publish image (Docker Hub)
+    name: Publish image (${{ inputs.registry }})
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # Vale para os dois registries: login num registry e tag apontando para
+      # outro termina em "denied" no push, sem dizer que o destino estava
+      # errado. Aqui o erro nomeia a tag.
+      - name: Confere o registry e as tags
+        shell: bash
+        env:
+          REGISTRY: ${{ inputs.registry }}
+          TAGS: ${{ inputs.tags }}
+          DESCRIPTION_REPOSITORY: ${{ inputs.description-repository }}
+        run: |
+          set -uo pipefail
+
+          case "$REGISTRY" in
+            docker.io|ghcr.io) ;;
+            *)
+              echo "::error::registry '${REGISTRY}' não é suportado. Use docker.io ou ghcr.io."
+              exit 1
+              ;;
+          esac
+
+          if [ "$REGISTRY" != docker.io ] && [ -n "$DESCRIPTION_REPOSITORY" ]; then
+            echo "::error::description-repository atualiza a descrição no Docker Hub e só vale com registry docker.io."
+            exit 1
+          fi
+
+          invalido=0
+          total=0
+          while IFS= read -r tag; do
+            tag="$(printf '%s' "$tag" | tr -d '[:blank:]')"
+            [ -z "$tag" ] && continue
+            total=$((total + 1))
+
+            # O primeiro segmento é host de registry quando tem ponto, dois
+            # pontos ou é `localhost` (mesma regra do Docker); sem host, a
+            # referência é do Docker Hub.
+            primeiro="${tag%%/*}"
+            host=docker.io
+            if [ "$primeiro" != "$tag" ]; then
+              case "$primeiro" in
+                *.*|*:*|localhost) host="$primeiro" ;;
+              esac
+            fi
+            [ "$host" = index.docker.io ] && host=docker.io
+
+            if [ "$host" != "$REGISTRY" ]; then
+              echo "::error::A tag '${tag}' aponta para ${host}, mas o login é em ${REGISTRY}."
+              invalido=1
+            fi
+
+            if [ "$REGISTRY" = ghcr.io ] && [ "$tag" != "$(printf '%s' "$tag" | tr '[:upper:]' '[:lower:]')" ]; then
+              echo "::error::A tag '${tag}' tem maiúscula; o ghcr.io só aceita repositório em minúsculas."
+              invalido=1
+            fi
+          done <<< "$TAGS"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::\`tags\` veio vazio — não há o que publicar."
+            exit 1
+          fi
+
+          exit "$invalido"
+
       - name: Confere as credenciais do Docker Hub
+        if: inputs.registry == 'docker.io'
         shell: bash
         env:
           DOCKERHUB_USERNAME: ${{ inputs.username }}
@@ -200,7 +289,9 @@ jobs:
           # é exatamente onde o build vai empurrar.
           # Primeira linha não-vazia, sem a tag. Tolera o newline com que um
           # bloco YAML costuma começar e o espaço de indentação.
-          repositorio="$(printf '%s\n' "$TAGS" | tr -d '[:blank:]' | sed '/^$/d' | head -1 | sed 's/:[^:/]*$//')"
+          # O prefixo `docker.io/` (ou `index.docker.io/`), quando vem, sai:
+          # o escopo do auth é só `namespace/repo`.
+          repositorio="$(printf '%s\n' "$TAGS" | tr -d '[:blank:]' | sed '/^$/d' | head -1 | sed 's/:[^:/]*$//' | sed -E 's#^(index\.)?docker\.io/##')"
 
           if [ -z "$repositorio" ]; then
             echo "::error::\`tags\` veio vazio — não há o que publicar."
@@ -231,11 +322,24 @@ jobs:
 
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - name: Login no Docker Hub
+        if: inputs.registry == 'docker.io'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: docker.io
           username: ${{ inputs.username }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # `GITHUB_TOKEN` do job chamador: sem segredo para guardar nem rotacionar,
+      # e o pacote nasce ligado ao repositório que publicou. Sem
+      # `packages: write` concedido por quem chama, o push volta "denied".
+      - name: Login no GitHub Container Registry
+        if: inputs.registry == 'ghcr.io'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -255,7 +359,7 @@ jobs:
       # de fora lê sobre a imagem, e mantê-la junto do push evita que ela
       # descreva uma versão que já saiu do ar.
       - name: Atualiza a descrição no Docker Hub
-        if: inputs.description-repository != ''
+        if: inputs.registry == 'docker.io' && inputs.description-repository != ''
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
         with:
           username: ${{ inputs.username }}
