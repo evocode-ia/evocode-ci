@@ -52,7 +52,7 @@ endereço interno, só passos de build.
 | Workflow | O que faz |
 |---|---|
 | [`laravel-ci.yml`](.github/workflows/laravel-ci.yml) | CI para projetos Laravel: Pint, PHPStan (com gate de baseline), `composer audit`, build de frontend (Vite/Ziggy) e testes com Pest, em sqlite ou MySQL de serviço. |
-| [`publish-image.yml`](.github/workflows/publish-image.yml) | Publica imagem no Docker Hub com pré-voo de credenciais (valida formato, não só presença) e, opcionalmente, atualiza a descrição do repositório no Docker Hub a partir do README. |
+| [`publish-image.yml`](.github/workflows/publish-image.yml) | Publica imagem no Docker Hub (padrão) ou no GitHub Container Registry, com pré-voo de tags e de credenciais (valida formato, não só presença) e, no Docker Hub, opcionalmente atualiza a descrição do repositório a partir do README. |
 
 Os jobs podem rodar em máquinas nossas, em VMs descartáveis, sem consumir minutos do GitHub. Como usar, como funciona,
 devs externos e troca de servidor: **[docs/runners.md](docs/runners.md)**.
@@ -144,6 +144,13 @@ preferência. Os comentários nos próprios arquivos `.yml` documentam o porquê
   amd64, e uma imagem construída em arm64 não roda lá.
 - **Cache `type=gha` em escopo próprio.** O job tem credencial de registry; o escopo isolado garante
   que ele só lê o que ele mesmo escreveu.
+- **Registry por input.** `registry: ghcr.io` publica no GitHub Container Registry com o
+  `GITHUB_TOKEN` do job chamador, sem segredo para guardar. Antes do login, o pré-voo confere que
+  toda tag aponta para o registry escolhido; tag de um registry com login em outro termina em
+  "denied" no push, sem dizer por quê. Decisão: ADR-0012 da camada `nexthop-dev-standards`.
+- **Permissões vêm de quem chama.** O workflow não declara `permissions`: um workflow chamado só
+  reduz o que recebe, e declarar `packages: write` aqui quebraria todo chamador que concede só
+  `contents: read`.
 
 ## Stack
 
@@ -173,8 +180,9 @@ Para `laravel-ci.yml`, o repositório consumidor precisa ter:
 
 Para `publish-image.yml`:
 
-- Variável do repositório `DOCKERHUB_USERNAME` (variável, **não** secret).
-- Secret `DOCKERHUB_TOKEN`, com escopo Read & Write no Docker Hub.
+- No Docker Hub (padrão): variável do repositório `DOCKERHUB_USERNAME` (variável, **não** secret) e
+  secret `DOCKERHUB_TOKEN`, com escopo Read & Write.
+- No GHCR (`registry: ghcr.io`): nenhum segredo; o job que chama concede `packages: write`.
 
 ### Instalação
 
@@ -271,16 +279,34 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 ```
 
-Com todas as entradas declaradas, nos valores padrão (`tags` e `username` são obrigatórias):
+No GitHub Container Registry, sem segredo. O job que chama concede `packages: write`, e as tags
+começam por `ghcr.io/`, em minúsculas:
+
+```yaml
+jobs:
+  publish:
+    permissions:
+      contents: read
+      packages: write
+    uses: evocode-ia/evocode-ci/.github/workflows/publish-image.yml@v1
+    with:
+      registry: ghcr.io
+      tags: |
+        ghcr.io/evocode-ia/minhaimagem:latest
+        ghcr.io/evocode-ia/minhaimagem:${{ github.sha }}
+```
+
+Com todas as entradas declaradas, nos valores padrão (`tags` é obrigatória; `username`, no Docker Hub):
 
 ```yaml
 jobs:
   publish:
     uses: evocode-ia/evocode-ci/.github/workflows/publish-image.yml@v1
     with:
+      registry: docker.io
       tags: |                       # obrigatória
         meuusuario/minhaimagem:latest
-      username: ${{ vars.DOCKERHUB_USERNAME }}  # obrigatória
+      username: ${{ vars.DOCKERHUB_USERNAME }}  # obrigatória no Docker Hub
       context: .
       file: ./Dockerfile
       platforms: linux/amd64
@@ -299,21 +325,22 @@ jobs:
 | Entrada | Padrão | O que faz |
 |---|---|---|
 | `runs-on` | `"ubuntu-latest"` | Onde rodar, em JSON. Runner próprio: `'["self-hosted","evocode-linux"]'`. O padrão usa minutos pagos do GitHub. |
-| `tags` | — (obrigatória) | Tags completas (`repo:tag`), uma por linha. |
-| `username` | — (obrigatória) | Usuário do Docker Hub. Passe `vars.DOCKERHUB_USERNAME`. |
+| `registry` | `docker.io` | Destino: `docker.io` ou `ghcr.io`. No `ghcr.io` o login usa o `GITHUB_TOKEN` do chamador (que concede `packages: write`) e o ator do workflow como usuário. |
+| `tags` | — (obrigatória) | Tags completas (`repo:tag`), uma por linha, todas no registry escolhido. No `ghcr.io`, em minúsculas. |
+| `username` | vazio | Usuário do Docker Hub, obrigatório com `registry: docker.io`. Passe `vars.DOCKERHUB_USERNAME`. Ignorado no `ghcr.io`. |
 | `context` | `.` | Contexto do build. |
 | `file` | `./Dockerfile` | Caminho do Dockerfile. |
 | `platforms` | `linux/amd64` | Plataformas do build. Declarado, não herdado do runner. |
 | `labels` | vazio | Labels OCI. |
 | `target` | vazio | Estágio do Dockerfile a construir, em build multi-stage. |
 | `build-args` | vazio | Argumentos de build (`NOME=valor`, um por linha), para dado do próprio build que a imagem carrega e o contexto não tem, como commit e data. Nunca segredo: fica gravado no histórico da imagem. |
-| `description-repository` | vazio | `namespace/repo` cuja descrição no Docker Hub deve ser atualizada a partir do README. Vazio desliga o passo. |
+| `description-repository` | vazio | `namespace/repo` cuja descrição no Docker Hub deve ser atualizada a partir do README. Vazio desliga o passo. Só no Docker Hub; com `ghcr.io`, o pré-voo recusa. |
 | `short-description` | vazio | Descrição curta do repositório no Docker Hub. |
 | `readme-filepath` | `./README.md` | Caminho do README publicado como descrição longa. |
 | `cache-scope` | `publish-image` | Escopo do cache `type=gha`, isolado do namespace padrão. |
 | `timeout-minutes` | `45` | Teto do job, em minutos. Suba só para imagem de gigabytes em runner com rede lenta até o cache ou a origem dos modelos. |
 
-Secret obrigatório: `DOCKERHUB_TOKEN`.
+Secret `DOCKERHUB_TOKEN`: obrigatório com `registry: docker.io`, sem uso no `ghcr.io`.
 
 > [!IMPORTANT]
 > `username` vem de `vars.DOCKERHUB_USERNAME`, variável do repositório, **não** secret. É o namespace
@@ -331,7 +358,7 @@ evocode-ci/
 │   ├── assets/            # banner do README
 │   └── workflows/
 │       ├── laravel-ci.yml     # CI reutilizável para projetos Laravel
-│       └── publish-image.yml  # publicação reutilizável de imagem no Docker Hub
+│       └── publish-image.yml  # publicação reutilizável de imagem (Docker Hub ou GHCR)
 ├── LICENSE
 └── README.md
 ```
